@@ -9,3 +9,10 @@ export interface IUrl extends Document {
   expiresAt: Date | null;
   createdAt: Date;
 }
+
+export interface IClick extends Document {
+  shortCode: string;
+  timestamp: Date;
+  referrer: string | null;
+  userAgent: string | null;
+}

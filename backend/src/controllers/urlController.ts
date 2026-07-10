@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { redis } from "../config/redis";
 import { Url } from "../models/Url";
 import { createShortUrl } from "../services/urlService";
+import { logClick } from "../services/ClickService";
+import { Click } from "../models/Click";
 
 export const shortenUrl = async (req: Request, res: Response) => {
   try {
@@ -38,14 +40,17 @@ export const redirectToLongUrl = async (req: Request, res: Response) => {
   try {
     const { shortCode } = req.params;
 
-    if (!shortCode) {
+    if (!shortCode || typeof shortCode !== "string") {
       return res.status(400).json({ error: "shortCode is required" });
     }
 
-    // 1. Check Redis first (cache hit)
+    const referrer = req.get("referer") ?? null;
+    const userAgent = req.get("user-agent") ?? null;
+
+    // 1. Cache hit
     const cached = await redis.get(`url:${shortCode}`);
     if (cached) {
-      console.log("CACHE HIT:", shortCode);
+      logClick(shortCode, referrer, userAgent); // not awaited
       return res.redirect(302, cached);
     }
 
@@ -55,12 +60,70 @@ export const redirectToLongUrl = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Short URL not found or expired" });
     }
 
-    // 3. Populate the cache for next time (TTL: 1 hour = 3600s)
-    console.log("CACHE MISS:", shortCode);
+    // 3. Populate cache
     await redis.set(`url:${shortCode}`, url.longUrl, "EX", 3600);
 
-    // 4. Redirect
+    // 4. Log + redirect
+    logClick(shortCode, referrer, userAgent); // not awaited
     return res.redirect(302, url.longUrl);
+  } catch (err) {
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+export const getUrlStats = async (req: Request, res: Response) => {
+  try {
+    const { shortCode } = req.params;
+
+    if (!shortCode || typeof shortCode !== "string") {
+      return res.status(400).json({ error: "shortCode is required" });
+    }
+
+    const url = await Url.findOne({ shortCode });
+    if (!url) {
+      return res.status(404).json({ error: "Short URL not found" });
+    }
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Pipeline 1: total clicks
+    const totalClicks = await Click.countDocuments({ shortCode });
+
+    // Pipeline 2: clicks per day, last 7 days
+    const clicksPerDay = await Click.aggregate([
+      { $match: { shortCode, timestamp: { $gte: sevenDaysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, date: "$_id", count: 1 } },
+    ]);
+
+    // Pipeline 3: top 5 referrers
+    const topReferrers = await Click.aggregate([
+      { $match: { shortCode } },
+      {
+        $group: {
+          _id: { $ifNull: ["$referrer", "direct"] },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      { $project: { _id: 0, referrer: "$_id", count: 1 } },
+    ]);
+
+    return res.json({
+      shortCode,
+      longUrl: url.longUrl,
+      createdAt: url.createdAt,
+      totalClicks,
+      clicksPerDay,
+      topReferrers,
+    });
   } catch (err) {
     return res.status(500).json({ error: "Something went wrong" });
   }
