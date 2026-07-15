@@ -4,8 +4,9 @@ import { Url } from "../models/Url";
 import { createShortUrl } from "../services/urlService";
 import { logClick } from "../services/ClickService";
 import { Click } from "../models/Click";
+import { AuthRequest } from "../types";
 
-export const shortenUrl = async (req: Request, res: Response) => {
+export const shortenUrl = async (req: AuthRequest, res: Response) => {
   try {
     const { longUrl, customAlias, expiresAt } = req.body;
 
@@ -22,7 +23,7 @@ export const shortenUrl = async (req: Request, res: Response) => {
     const url = await createShortUrl(
       longUrl,
       customAlias,
-      undefined,
+      req.userId,
       expiresAt ? new Date(expiresAt) : undefined
     );
 
@@ -71,17 +72,22 @@ export const redirectToLongUrl = async (req: Request, res: Response) => {
   }
 };
 
-export const getUrlStats = async (req: Request, res: Response) => {
+export const getUrlStats = async (req: AuthRequest, res: Response) => {
   try {
     const { shortCode } = req.params;
 
     if (!shortCode || typeof shortCode !== "string") {
       return res.status(400).json({ error: "shortCode is required" });
     }
+    
 
     const url = await Url.findOne({ shortCode });
     if (!url) {
       return res.status(404).json({ error: "Short URL not found" });
+    }
+
+    if (!url.userId || url.userId !== req.userId) {
+    return res.status(403).json({ error: "You don't have access to these stats" });
     }
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -125,6 +131,21 @@ export const getUrlStats = async (req: Request, res: Response) => {
       topReferrers,
     });
   } catch (err) {
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+export const getMyUrls = async (req: AuthRequest, res: Response) => {
+  try {
+     const userId = req.userId;                      // ① copy to a local first
+    if (typeof userId !== "string") {               // ② narrow it explicitly
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    const urls = await Url.find({ userId })         // ③ use the LOCAL variable
+      .sort({ createdAt: -1 })
+      .select("shortCode longUrl createdAt expiresAt isActive");
+    return res.json(urls);
+  } catch {
     return res.status(500).json({ error: "Something went wrong" });
   }
 };

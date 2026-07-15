@@ -1,4 +1,5 @@
 import { Document } from "mongoose";
+import { Request } from "express";
 
 export interface IUrl extends Document {
   shortCode: string;
@@ -8,6 +9,8 @@ export interface IUrl extends Document {
   isActive: boolean;
   expiresAt: Date | null;
   createdAt: Date;
+  email: string;
+  password: string; // hashed, never plaintext
 }
 
 export interface IClick extends Document {
@@ -15,4 +18,14 @@ export interface IClick extends Document {
   timestamp: Date;
   referrer: string | null;
   userAgent: string | null;
+}
+
+export interface IUser extends Document {
+  email: string;
+  password: string;
+  createdAt: Date;
+}
+
+export interface AuthRequest extends Request {
+  userId?: string;
 }
