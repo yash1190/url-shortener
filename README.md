@@ -1,3 +1,5 @@
+**Live demo:** https://url-shortener-lac-theta.vercel.app
+
 # URL Shortener
 
 A full-stack URL shortening service built with the MERN stack (MongoDB, Express, React, Node.js) in TypeScript designed around read-heavy traffic patterns, with Redis caching, click analytics, JWT authentication, and distributed rate limiting.
