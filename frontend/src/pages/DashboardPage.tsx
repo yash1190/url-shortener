@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import client from "../api/client";
 import { useAuth } from "../context/authContext";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
 
 interface UrlItem {
   shortCode: string;
@@ -62,8 +63,8 @@ const DashboardPage = () => {
           key={u.shortCode}
           style={{ border: "1px solid #ddd", padding: 12, marginBottom: 8 }}
         >
-          <a href={`http://localhost:5000/${u.shortCode}`} target="_blank">
-            localhost:5000/{u.shortCode}
+          <a href={`${API_URL}/${u.shortCode}`} target="_blank">
+          {API_URL.replace(/^https?:\/\//, "")}/{u.shortCode}
           </a>
           <div style={{ color: "#666", fontSize: 14 }}>{u.longUrl}</div>
           <Link to={`/stats/${u.shortCode}`}>View stats →</Link>
